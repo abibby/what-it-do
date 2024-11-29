@@ -1,29 +1,36 @@
 package main
 
 import (
-	"context"
+	"encoding/csv"
+	"log"
 	"os"
-
-	"github.com/abibby/salusa/clog"
-	"github.com/abibby/salusa/di"
-	"github.com/abibby/what-it-do/app"
+	"time"
 )
 
+const DateFormat = "January 2, 2006"
+
 func main() {
-	ctx := di.ContextWithDependencyProvider(
-		context.Background(),
-		di.NewDependencyProvider(),
-	)
 
-	err := app.Kernel.Bootstrap(ctx)
+	now := time.Now()
+	start := startOfDay(now)
+	end := startOfDay(now.Add(24 * time.Hour))
+
+	out := csv.NewWriter(os.Stdout)
+	out.Comma = '\t'
+
+	err := addCalenderEvents(start, end, out)
 	if err != nil {
-		clog.Use(ctx).Error("error bootstrapping", "error", err)
-		os.Exit(1)
+		log.Fatal(err)
+	}
+	err = addJiraIssues(start, end, out)
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	err = app.Kernel.Run(ctx)
+	err = out.Write([]string{})
 	if err != nil {
-		clog.Use(ctx).Error("error running", "error", err)
-		os.Exit(1)
+		log.Fatal(err)
 	}
+
+	out.Flush()
 }

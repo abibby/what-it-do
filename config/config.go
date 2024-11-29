@@ -4,21 +4,18 @@ import (
 	"errors"
 	"os"
 
-	"github.com/abibby/salusa/database"
-	"github.com/abibby/salusa/database/dialects/sqlite"
 	"github.com/abibby/salusa/env"
-	"github.com/abibby/salusa/event"
-	"github.com/abibby/what-it-do/services/sms"
 	"github.com/joho/godotenv"
 )
 
 type Config struct {
-	Port     int
-	BasePath string
+	Jira *JiraConfig
+}
 
-	Database database.Config
-	SMS      sms.Config
-	Queue    event.Config
+type JiraConfig struct {
+	Username string
+	Password string
+	BaseURL  string
 }
 
 func Load() *Config {
@@ -30,26 +27,10 @@ func Load() *Config {
 	}
 
 	return &Config{
-		Port:     env.Int("PORT", 2303),
-		BasePath: env.String("BASE_PATH", ""),
-		Database: sqlite.NewConfig(env.String("DATABASE_PATH", "./db.sqlite")),
-		Queue:    event.NewChannelQueueConfig(),
+		Jira: &JiraConfig{
+			Username: env.String("JIRA_USERNAME", ""),
+			Password: env.String("JIRA_PASSWORD", ""),
+			BaseURL:  env.String("JIRA_BASE_URL", ""),
+		},
 	}
-}
-
-func (c *Config) GetHTTPPort() int {
-	return c.Port
-}
-func (c *Config) GetBaseURL() string {
-	return c.BasePath
-}
-
-func (c *Config) DBConfig() database.Config {
-	return c.Database
-}
-func (c *Config) SMSConfig() sms.Config {
-	return c.SMS
-}
-func (c *Config) QueueConfig() event.Config {
-	return c.Queue
 }
