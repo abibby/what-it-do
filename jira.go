@@ -45,12 +45,9 @@ func addJiraIssues(start, end time.Time, out *csv.Writer) error {
 		return err
 	}
 
-	date := time.Now().Format(DateFormat)
+	date := time.Now()
 	for _, issue := range issues {
-		project := "Technical - "
 		subCategory := ""
-		hours := ""
-		description := fmt.Sprintf("%s: %s", issue.Key, issue.Fields.Summary)
 
 		changelogs, _, err := GetChangelogs(jiraClient, issue.ID, nil)
 		if err != nil {
@@ -79,13 +76,12 @@ func addJiraIssues(start, end time.Time, out *csv.Writer) error {
 			continue
 		}
 
-		err = out.Write([]string{
-			date,
-			project,
-			subCategory,
-			hours,
-			description,
-		})
+		err = out.Write(Row{
+			Date:        date,
+			Project:     "Technical - ",
+			SubCategory: subCategory,
+			Description: fmt.Sprintf("%s: %s", issue.Key, issue.Fields.Summary),
+		}.ToCSVRow())
 		if err != nil {
 			return err
 		}

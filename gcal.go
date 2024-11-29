@@ -37,8 +37,6 @@ func addCalenderEvents(start, end time.Time, out *csv.Writer) error {
 			return fmt.Errorf("invalid date format for end: %w", err)
 		}
 
-		duration := end.Sub(start).Hours()
-
 		project := "Meetings - "
 		description := item.Summary
 
@@ -47,13 +45,12 @@ func addCalenderEvents(start, end time.Time, out *csv.Writer) error {
 			description = ""
 		}
 
-		err = out.Write([]string{
-			start.Format(DateFormat),
-			project,
-			"", // sub category
-			fmt.Sprint(duration),
-			description,
-		})
+		err = out.Write(Row{
+			Date:        start,
+			Project:     project,
+			Hours:       end.Sub(start),
+			Description: description,
+		}.ToCSVRow())
 		if err != nil {
 			return err
 		}

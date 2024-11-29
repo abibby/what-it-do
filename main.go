@@ -2,12 +2,35 @@ package main
 
 import (
 	"encoding/csv"
+	"fmt"
 	"log"
 	"os"
 	"time"
 )
 
 const DateFormat = "January 2, 2006"
+
+type Row struct {
+	Date        time.Time
+	Project     string
+	SubCategory string
+	Hours       time.Duration
+	Description string
+}
+
+func (r Row) ToCSVRow() []string {
+	hours := ""
+	if r.Hours != 0 {
+		hours = fmt.Sprint(r.Hours.Hours())
+	}
+	return []string{
+		r.Date.Format(DateFormat),
+		r.Project,
+		r.SubCategory,
+		hours,
+		r.Description,
+	}
+}
 
 func main() {
 
