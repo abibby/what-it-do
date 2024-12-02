@@ -9,10 +9,12 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"time"
 
 	_ "embed"
 
+	"github.com/abibby/what-it-do/config"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/calendar/v3"
@@ -48,14 +50,14 @@ func getGCalService() (*calendar.Service, error) {
 }
 
 // Retrieve a token, saves the token, then returns the generated client.
-func getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error) {
+func getClient(ctx context.Context, cfg *oauth2.Config) (*http.Client, error) {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
-	tokFile := "token.json"
+	tokFile := path.Join(config.Dir(), "token.json")
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
-		tok, err = getTokenFromWeb(ctx, config)
+		tok, err = getTokenFromWeb(ctx, cfg)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get token from web: %w", err)
 		}
@@ -64,7 +66,7 @@ func getClient(ctx context.Context, config *oauth2.Config) (*http.Client, error)
 			return nil, fmt.Errorf("failed to save token: %w", err)
 		}
 	}
-	return config.Client(context.Background(), tok), nil
+	return cfg.Client(context.Background(), tok), nil
 }
 
 // Request a token from the web, then returns the retrieved token.
@@ -97,9 +99,15 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 }
 
 // Saves a token to a file path.
-func saveToken(path string, token *oauth2.Token) error {
-	fmt.Fprintf(os.Stderr, "Saving credential file to: %s\n", path)
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
+func saveToken(p string, token *oauth2.Token) error {
+	fmt.Fprintf(os.Stderr, "Saving credential file to: %s\n", p)
+
+	err := os.MkdirAll(path.Dir(p), 0755)
+	if err != nil {
+		return fmt.Errorf("unable to create directory for oauth token: %v", err)
+	}
+
+	f, err := os.OpenFile(p, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0600)
 	if err != nil {
 		return fmt.Errorf("unable to cache oauth token: %v", err)
 	}

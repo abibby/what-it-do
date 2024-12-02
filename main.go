@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/csv"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -33,6 +34,15 @@ func (r Row) ToCSVRow() []string {
 }
 
 func main() {
+	var cal bool
+	var jira bool
+
+	flag.BoolVar(&cal, "calendar", false, "run calendar tests")
+	flag.BoolVar(&jira, "jira", false, "run jira tests")
+
+	flag.Parse()
+
+	all := !cal && !jira
 
 	now := time.Now()
 	start := startOfDay(now)
@@ -41,16 +51,21 @@ func main() {
 	out := csv.NewWriter(os.Stdout)
 	out.Comma = '\t'
 
-	err := addCalenderEvents(start, end, out)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = addJiraIssues(start, end, out)
-	if err != nil {
-		log.Fatal(err)
+	if all || cal {
+		err := addCalenderEvents(start, end, out)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 
-	err = out.Write([]string{})
+	if all || jira {
+		err := addJiraIssues(start, end, out)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	err := out.Write([]string{})
 	if err != nil {
 		log.Fatal(err)
 	}
