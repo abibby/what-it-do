@@ -36,15 +36,20 @@ func (r Row) ToCSVRow() []string {
 func main() {
 	var cal bool
 	var jira bool
+	var day string
 
 	flag.BoolVar(&cal, "calendar", false, "run calendar tests")
 	flag.BoolVar(&jira, "jira", false, "run jira tests")
+	flag.StringVar(&day, "date", time.Now().Format(time.DateOnly), "the date to get info for")
 
 	flag.Parse()
 
 	all := !cal && !jira
 
-	now := time.Now()
+	now, err := time.Parse(time.DateOnly, day)
+	if err != nil {
+		log.Fatal(err)
+	}
 	start := startOfDay(now)
 	end := startOfDay(now.Add(24 * time.Hour))
 
@@ -65,7 +70,7 @@ func main() {
 		}
 	}
 
-	err := out.Write([]string{})
+	err = out.Write([]string{})
 	if err != nil {
 		log.Fatal(err)
 	}

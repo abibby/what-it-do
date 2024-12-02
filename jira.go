@@ -45,7 +45,6 @@ func addJiraIssues(start, end time.Time, out *csv.Writer) error {
 		return err
 	}
 
-	date := time.Now()
 	for _, issue := range issues {
 		subCategory := ""
 
@@ -54,7 +53,7 @@ func addJiraIssues(start, end time.Time, out *csv.Writer) error {
 			return err
 		}
 
-		states := statesToday(&issue, changelogs.Values)
+		states := statesBetween(&issue, changelogs.Values, start, end)
 
 		if issue.Fields.Assignee.AccountID == currentUser.AccountID {
 			if states.Has("In Progress") {
@@ -77,7 +76,7 @@ func addJiraIssues(start, end time.Time, out *csv.Writer) error {
 		}
 
 		err = out.Write(Row{
-			Date:        date,
+			Date:        start,
 			Project:     "Technical - ",
 			SubCategory: subCategory,
 			Description: fmt.Sprintf("%s: %s", issue.Key, issue.Fields.Summary),
@@ -105,20 +104,51 @@ func hasEditedField(changes []*jira.ChangelogHistory, accountID string, field st
 	return false
 }
 
-func statesToday(issue *jira.Issue, changes []*jira.ChangelogHistory) set.Set[string] {
+func statesBetween(issue *jira.Issue, changes []*jira.ChangelogHistory, minTime, maxTime time.Time) set.Set[string] {
 	states := set.New[string]()
-	after := startOfDay(time.Now()).Format(time.RFC3339)
+
+	var lastBefore *jira.ChangelogHistory
+	var firstAfter *jira.ChangelogHistory
+
 	for _, change := range changes {
-		if change.Created < after {
+		created, err := change.CreatedTime()
+		if err != nil {
+			panic(err)
+		}
+		if created.Before(minTime) {
+			lastBefore = change
 			continue
 		}
+		if created.After(maxTime) {
+			firstAfter = change
+			break
+		}
 		for _, item := range change.Items {
+			if item.Field == "status" {
+				states.Add(item.FromString)
+				states.Add(item.ToString)
+			}
+		}
+	}
+
+	if lastBefore != nil {
+		for _, item := range lastBefore.Items {
 			if item.Field == "status" {
 				states.Add(item.ToString)
 			}
 		}
 	}
-	states.Add(issue.Fields.Status.Name)
+
+	if firstAfter != nil {
+		for _, item := range firstAfter.Items {
+			if item.Field == "status" {
+				states.Add(item.FromString)
+			}
+		}
+	} else {
+		states.Add(issue.Fields.Status.Name)
+	}
+
 	return states
 }
 
