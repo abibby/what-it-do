@@ -1,3 +1,5 @@
 .env
 credentials.json
-token.json
+*token.json
+atlassian_creds.json
+jira_credentials

@@ -3,14 +3,20 @@ package main
 import (
 	"context"
 	"encoding/csv"
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/url"
+	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/abibby/salusa/set"
-	"github.com/abibby/what-it-do/config"
+	"github.com/abibby/what-it-do/atlassian"
+	"github.com/abibby/what-it-do/ezoauth"
 	"github.com/andygrunwald/go-jira"
+	"golang.org/x/oauth2"
 )
 
 const (
@@ -18,21 +24,91 @@ const (
 	FieldSprint    = "customfield_10020"
 )
 
+type JiraOAuth struct {
+	URL string
+}
+
+func ConfigFromJSON(b []byte) (*oauth2.Config, error) {
+	type a struct {
+		URL          string `json:"url"`
+		ClientSecret string `json:"client_secret"`
+	}
+
+	creds := &a{}
+	err := json.Unmarshal(b, creds)
+	if err != nil {
+		return nil, err
+	}
+
+	u, err := url.Parse(creds.URL)
+	if err != nil {
+		return nil, err
+	}
+	authURL := *u
+	authURL.RawQuery = ""
+	q := u.Query()
+	return &oauth2.Config{
+		ClientID:     q.Get("client_id"),
+		ClientSecret: creds.ClientSecret,
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  authURL.String(),
+			TokenURL: "https://auth.atlassian.com/oauth/token",
+		},
+		RedirectURL: q.Get("redirect_uri"),
+		Scopes:      strings.Split(q.Get("scope"), " "),
+	}, nil
+}
+
+func getJiraClient() (*jira.Client, error) {
+	// cfg := config.Load()
+	ctx := context.Background()
+	creds, err := os.ReadFile("atlassian_creds.json")
+	if err != nil {
+		log.Fatalf("Unable to read client secret file: %v", err)
+	}
+
+	config, err := ConfigFromJSON(creds)
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := ezoauth.GetClient(ctx, "jira", config,
+		[]oauth2.AuthCodeOption{
+			oauth2.SetAuthURLParam("audience", "api.atlassian.com"),
+			oauth2.ApprovalForce,
+		},
+		[]oauth2.AuthCodeOption{},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("could not start jira client: %w", err)
+	}
+
+	atlassianClient := atlassian.NewClient(client)
+	resources, err := atlassianClient.AccessibleResources()
+	if err != nil {
+		return nil, err
+	}
+
+	if len(resources) != 1 {
+		return nil, fmt.Errorf("more than one resource returned")
+	}
+
+	jiraClient, err := jira.NewClient(client, "https://api.atlassian.com/ex/jira/"+url.PathEscape(resources[0].ID))
+	if err != nil {
+		return nil, err
+	}
+	return jiraClient, nil
+}
+
 func addJiraIssues(start, end time.Time, out *csv.Writer) error {
-	cfg := config.Load()
-
-	tp := jira.BasicAuthTransport{
-		Username: cfg.Jira.Username,
-		Password: cfg.Jira.Password,
-	}
-	jiraClient, err := jira.NewClient(tp.Client(), cfg.Jira.BaseURL)
+	jiraClient, err := getJiraClient()
 	if err != nil {
 		return err
 	}
 
-	currentUser, _, err := jiraClient.User.GetSelf()
+	currentUser, _, err := GetMyself(jiraClient, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("get self: %w", err)
 	}
 
 	issues, _, err := jiraClient.Issue.Search(
@@ -42,7 +118,7 @@ func addJiraIssues(start, end time.Time, out *csv.Writer) error {
 		},
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("issue search: %w", err)
 	}
 
 	for _, issue := range issues {
@@ -50,7 +126,7 @@ func addJiraIssues(start, end time.Time, out *csv.Writer) error {
 
 		changelogs, _, err := GetChangelogs(jiraClient, issue.ID, nil)
 		if err != nil {
-			return err
+			return fmt.Errorf("issue changelog: %w", err)
 		}
 
 		states := statesBetween(&issue, changelogs.Values, start, end)
@@ -175,15 +251,40 @@ type PaginatedResponse[T any] struct {
 	Values []T `json:"values"`
 }
 
-// type ChangelogItem struct {
-// 	// The user who made the change.
-// 	Author *jira.User `json:"author"`
+type MyselfOptions struct {
+	Expand string
+}
 
-// 	// The date on which the change took place.
-// 	Created jira.Time `json:"created"`
+func GetMyself(client *jira.Client, options *MyselfOptions) (*jira.User, *jira.Response, error) {
+	return GetMyselfContext(context.Background(), client, options)
+}
+func GetMyselfContext(ctx context.Context, client *jira.Client, options *MyselfOptions) (*jira.User, *jira.Response, error) {
+	u := url.URL{
+		Path: "/rest/api/3/myself",
+	}
+	uv := url.Values{}
 
-//		HistoryMetadata *jira.ChangelogHistory `json:"historyMetadata"`
-//	}
+	if options != nil {
+		if options.Expand != "" {
+			uv.Add("expand", options.Expand)
+		}
+	}
+
+	u.RawQuery = uv.Encode()
+
+	req, err := client.NewRequestWithContext(ctx, "GET", u.String(), nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	v := &jira.User{}
+	resp, err := client.Do(req, v)
+	if err != nil {
+		err = jira.NewJiraError(resp, err)
+	}
+	return v, resp, err
+}
+
 type ChangelogResponse PaginatedResponse[*jira.ChangelogHistory]
 type ChangelogOptions struct {
 	StartAt    int
