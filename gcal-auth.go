@@ -25,7 +25,14 @@ func getGCalService() (*calendar.Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to parse client secret file to config: %w", err)
 	}
-	client, err := ezoauth.GetClient(ctx, "google", config, []oauth2.AuthCodeOption{oauth2.AccessTypeOffline}, []oauth2.AuthCodeOption{})
+	ezconfig := &ezoauth.Config{
+		Name:        "google",
+		OAuthConfig: config,
+		AuthCodeURLOpts: []oauth2.AuthCodeOption{
+			oauth2.AccessTypeOffline,
+		},
+	}
+	client, err := ezconfig.Client(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not start calendar client: %w", err)
 	}

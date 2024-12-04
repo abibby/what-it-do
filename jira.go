@@ -9,7 +9,6 @@ import (
 	"net/url"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/abibby/salusa/set"
@@ -30,8 +29,10 @@ type JiraOAuth struct {
 
 func ConfigFromJSON(b []byte) (*oauth2.Config, error) {
 	type a struct {
-		URL          string `json:"url"`
-		ClientSecret string `json:"client_secret"`
+		ClientID     string   `json:"client_id"`
+		Scopes       []string `json:"scopes"`
+		RedirectURI  string   `json:"redirect_uri"`
+		ClientSecret string   `json:"client_secret"`
 	}
 
 	creds := &a{}
@@ -40,27 +41,19 @@ func ConfigFromJSON(b []byte) (*oauth2.Config, error) {
 		return nil, err
 	}
 
-	u, err := url.Parse(creds.URL)
-	if err != nil {
-		return nil, err
-	}
-	authURL := *u
-	authURL.RawQuery = ""
-	q := u.Query()
 	return &oauth2.Config{
-		ClientID:     q.Get("client_id"),
+		ClientID:     creds.ClientID,
 		ClientSecret: creds.ClientSecret,
 		Endpoint: oauth2.Endpoint{
-			AuthURL:  authURL.String(),
+			AuthURL:  "https://auth.atlassian.com/authorize",
 			TokenURL: "https://auth.atlassian.com/oauth/token",
 		},
-		RedirectURL: q.Get("redirect_uri"),
-		Scopes:      strings.Split(q.Get("scope"), " "),
+		RedirectURL: creds.RedirectURI,
+		Scopes:      creds.Scopes,
 	}, nil
 }
 
 func getJiraClient() (*jira.Client, error) {
-	// cfg := config.Load()
 	ctx := context.Background()
 	creds, err := os.ReadFile("atlassian_creds.json")
 	if err != nil {
@@ -71,14 +64,15 @@ func getJiraClient() (*jira.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	client, err := ezoauth.GetClient(ctx, "jira", config,
-		[]oauth2.AuthCodeOption{
+	ezconfig := &ezoauth.Config{
+		Name:        "jira",
+		OAuthConfig: config,
+		AuthCodeURLOpts: []oauth2.AuthCodeOption{
 			oauth2.SetAuthURLParam("audience", "api.atlassian.com"),
 			oauth2.ApprovalForce,
 		},
-		[]oauth2.AuthCodeOption{},
-	)
+	}
+	client, err := ezconfig.Client(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not start jira client: %w", err)
 	}
