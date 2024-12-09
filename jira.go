@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -94,15 +93,15 @@ func getJiraClient() (*jira.Client, error) {
 	return jiraClient, nil
 }
 
-func addJiraIssues(start, end time.Time, out *csv.Writer) error {
+func addJiraIssues(start, end time.Time) ([]*Row, error) {
 	jiraClient, err := getJiraClient()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	currentUser, _, err := GetMyself(jiraClient, nil)
+	currentUser, _, err := jiraClient.User.GetSelf()
 	if err != nil {
-		return fmt.Errorf("get self: %w", err)
+		return nil, fmt.Errorf("get self: %w", err)
 	}
 
 	issues, _, err := jiraClient.Issue.Search(
@@ -112,15 +111,16 @@ func addJiraIssues(start, end time.Time, out *csv.Writer) error {
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("issue search: %w", err)
+		return nil, fmt.Errorf("issue search: %w", err)
 	}
 
+	rows := []*Row{}
 	for _, issue := range issues {
 		subCategory := ""
 
 		changelogs, _, err := GetChangelogs(jiraClient, issue.ID, nil)
 		if err != nil {
-			return fmt.Errorf("issue changelog: %w", err)
+			return nil, fmt.Errorf("issue changelog: %w", err)
 		}
 
 		states := statesBetween(&issue, changelogs.Values, start, end)
@@ -145,18 +145,15 @@ func addJiraIssues(start, end time.Time, out *csv.Writer) error {
 			continue
 		}
 
-		err = out.Write(Row{
+		rows = append(rows, &Row{
 			Date:        start,
 			Project:     "Technical - ",
 			SubCategory: subCategory,
 			Description: fmt.Sprintf("%s: %s", issue.Key, issue.Fields.Summary),
-		}.ToCSVRow())
-		if err != nil {
-			return err
-		}
+		})
 	}
 
-	return nil
+	return rows, nil
 }
 
 func hasEditedField(changes []*jira.ChangelogHistory, accountID string, field string) bool {
@@ -247,36 +244,6 @@ type PaginatedResponse[T any] struct {
 
 type MyselfOptions struct {
 	Expand string
-}
-
-func GetMyself(client *jira.Client, options *MyselfOptions) (*jira.User, *jira.Response, error) {
-	return GetMyselfContext(context.Background(), client, options)
-}
-func GetMyselfContext(ctx context.Context, client *jira.Client, options *MyselfOptions) (*jira.User, *jira.Response, error) {
-	u := url.URL{
-		Path: "/rest/api/3/myself",
-	}
-	uv := url.Values{}
-
-	if options != nil {
-		if options.Expand != "" {
-			uv.Add("expand", options.Expand)
-		}
-	}
-
-	u.RawQuery = uv.Encode()
-
-	req, err := client.NewRequestWithContext(ctx, "GET", u.String(), nil)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	v := &jira.User{}
-	resp, err := client.Do(req, v)
-	if err != nil {
-		err = jira.NewJiraError(resp, err)
-	}
-	return v, resp, err
 }
 
 type ChangelogResponse PaginatedResponse[*jira.ChangelogHistory]

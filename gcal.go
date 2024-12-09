@@ -1,16 +1,15 @@
 package main
 
 import (
-	"encoding/csv"
 	"fmt"
 	"strings"
 	"time"
 )
 
-func addCalenderEvents(start, end time.Time, out *csv.Writer) error {
+func addCalenderEvents(start, end time.Time) ([]*Row, error) {
 	calendarService, err := getGCalService()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	events, err := calendarService.Events.List("primary").
 		ShowDeleted(false).
@@ -21,20 +20,21 @@ func addCalenderEvents(start, end time.Time, out *csv.Writer) error {
 		OrderBy("startTime").
 		Do()
 	if err != nil {
-		return fmt.Errorf("unable to retrieve next ten of the user's events: %w", err)
+		return nil, fmt.Errorf("unable to retrieve next ten of the user's events: %w", err)
 	}
 
+	rows := []*Row{}
 	for _, item := range events.Items {
 		if item.Start.Date != "" || item.End.Date != "" {
 			continue
 		}
 		start, err := time.Parse(time.RFC3339, item.Start.DateTime)
 		if err != nil {
-			return fmt.Errorf("invalid date format for start: %w", err)
+			return nil, fmt.Errorf("invalid date format for start: %w", err)
 		}
 		end, err := time.Parse(time.RFC3339, item.End.DateTime)
 		if err != nil {
-			return fmt.Errorf("invalid date format for end: %w", err)
+			return nil, fmt.Errorf("invalid date format for end: %w", err)
 		}
 
 		project := "Meetings - "
@@ -43,18 +43,21 @@ func addCalenderEvents(start, end time.Time, out *csv.Writer) error {
 		if strings.Contains(item.Summary, "Standup") {
 			project = "Meetings - Daily Standup"
 			description = ""
+		} else if strings.Contains(item.Summary, "Sprint Demo") {
+			project = "Meetings - Sprint Demo"
+			description = ""
+		} else if strings.Contains(item.Summary, "Backlog Refinement") {
+			project = "Meetings - Backlog Refinement"
+			description = ""
 		}
 
-		err = out.Write(Row{
+		rows = append(rows, &Row{
 			Date:        start,
 			Project:     project,
 			Hours:       end.Sub(start),
 			Description: description,
-		}.ToCSVRow())
-		if err != nil {
-			return err
-		}
+		})
 	}
 
-	return nil
+	return rows, nil
 }

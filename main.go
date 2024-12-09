@@ -51,25 +51,34 @@ func main() {
 		log.Fatal(err)
 	}
 	start := startOfDay(now)
-	end := startOfDay(now.Add(24 * time.Hour))
+	end := endOfDay(now)
 
 	out := csv.NewWriter(os.Stdout)
 	out.Comma = '\t'
 
+	rows := []*Row{}
 	if all || cal {
-		err := addCalenderEvents(start, end, out)
+		calRows, err := addCalenderEvents(start, end)
 		if err != nil {
 			log.Fatal(err)
 		}
+		rows = append(rows, calRows...)
 	}
 
 	if all || jira {
-		err := addJiraIssues(start, end, out)
+		jiraRows, err := addJiraIssues(start, end)
+		if err != nil {
+			log.Fatal(err)
+		}
+		rows = append(rows, jiraRows...)
+	}
+
+	for _, row := range rows {
+		err = out.Write(row.ToCSVRow())
 		if err != nil {
 			log.Fatal(err)
 		}
 	}
-
 	err = out.Write([]string{})
 	if err != nil {
 		log.Fatal(err)
