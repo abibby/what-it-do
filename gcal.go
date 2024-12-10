@@ -2,12 +2,13 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 )
 
-func addCalenderEvents(start, end time.Time) ([]*Row, error) {
-	calendarService, err := getGCalService()
+func GetCalenderEvents(r *http.Request, start, end time.Time) ([]*Row, error) {
+	calendarService, err := getGCalService(r)
 	if err != nil {
 		return nil, err
 	}

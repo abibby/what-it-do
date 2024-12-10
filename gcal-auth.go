@@ -1,9 +1,9 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/abibby/what-it-do/ezoauth"
@@ -13,8 +13,9 @@ import (
 	"google.golang.org/api/option"
 )
 
-func getGCalService() (*calendar.Service, error) {
-	ctx := context.Background()
+var GoogleConfig *ezoauth.Config
+
+func init() {
 	creds, err := os.ReadFile("credentials.json")
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
@@ -23,21 +24,24 @@ func getGCalService() (*calendar.Service, error) {
 	// If modifying these scopes, delete your previously saved token.json.
 	config, err := google.ConfigFromJSON(creds, calendar.CalendarReadonlyScope)
 	if err != nil {
-		return nil, fmt.Errorf("unable to parse client secret file to config: %w", err)
+		log.Fatalf("unable to parse client secret file to config: %v", err)
 	}
-	ezconfig := &ezoauth.Config{
+	GoogleConfig = &ezoauth.Config{
 		Name:        "google",
 		OAuthConfig: config,
 		AuthCodeURLOpts: []oauth2.AuthCodeOption{
 			oauth2.AccessTypeOffline,
 		},
 	}
-	client, err := ezconfig.Client(ctx)
+}
+
+func getGCalService(r *http.Request) (*calendar.Service, error) {
+	client, err := GoogleConfig.Client(r)
 	if err != nil {
 		return nil, fmt.Errorf("could not start calendar client: %w", err)
 	}
 
-	srv, err := calendar.NewService(ctx, option.WithHTTPClient(client))
+	srv, err := calendar.NewService(r.Context(), option.WithHTTPClient(client))
 	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve Calendar client: %w", err)
 	}

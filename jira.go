@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -21,6 +22,30 @@ const (
 	FieldTestCases = "customfield_10034"
 	FieldSprint    = "customfield_10020"
 )
+
+var JiraConfig *ezoauth.Config
+
+func init() {
+
+	creds, err := os.ReadFile("atlassian_creds.json")
+	if err != nil {
+		log.Fatal(fmt.Errorf("Unable to read client secret file: %w", err))
+	}
+
+	config, err := ConfigFromJSON(creds)
+	if err != nil {
+		log.Fatal(err)
+	}
+	JiraConfig = &ezoauth.Config{
+		Name:        "atlassian",
+		OAuthConfig: config,
+		AuthCodeURLOpts: []oauth2.AuthCodeOption{
+			oauth2.SetAuthURLParam("audience", "api.atlassian.com"),
+			oauth2.ApprovalForce,
+		},
+	}
+
+}
 
 type JiraOAuth struct {
 	URL string
@@ -52,26 +77,8 @@ func ConfigFromJSON(b []byte) (*oauth2.Config, error) {
 	}, nil
 }
 
-func getJiraClient() (*jira.Client, error) {
-	ctx := context.Background()
-	creds, err := os.ReadFile("atlassian_creds.json")
-	if err != nil {
-		log.Fatalf("Unable to read client secret file: %v", err)
-	}
-
-	config, err := ConfigFromJSON(creds)
-	if err != nil {
-		return nil, err
-	}
-	ezconfig := &ezoauth.Config{
-		Name:        "jira",
-		OAuthConfig: config,
-		AuthCodeURLOpts: []oauth2.AuthCodeOption{
-			oauth2.SetAuthURLParam("audience", "api.atlassian.com"),
-			oauth2.ApprovalForce,
-		},
-	}
-	client, err := ezconfig.Client(ctx)
+func getJiraClient(r *http.Request) (*jira.Client, error) {
+	client, err := JiraConfig.Client(r)
 	if err != nil {
 		return nil, fmt.Errorf("could not start jira client: %w", err)
 	}
@@ -93,8 +100,8 @@ func getJiraClient() (*jira.Client, error) {
 	return jiraClient, nil
 }
 
-func addJiraIssues(start, end time.Time) ([]*Row, error) {
-	jiraClient, err := getJiraClient()
+func GetJiraIssues(r *http.Request, start, end time.Time) ([]*Row, error) {
+	jiraClient, err := getJiraClient(r)
 	if err != nil {
 		return nil, err
 	}
