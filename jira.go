@@ -12,6 +12,7 @@ import (
 
 	"github.com/abibby/salusa/set"
 	"github.com/abibby/what-it-do/atlassian"
+	"github.com/abibby/what-it-do/config"
 	"github.com/abibby/what-it-do/ezoauth"
 	"github.com/andygrunwald/go-jira"
 	"golang.org/x/oauth2"
@@ -54,7 +55,7 @@ func ConfigFromJSON(b []byte) (*oauth2.Config, error) {
 
 func getJiraClient() (*jira.Client, error) {
 	ctx := context.Background()
-	creds, err := os.ReadFile("atlassian_creds.json")
+	creds, err := os.ReadFile(config.Dir("atlassian_creds.json"))
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}

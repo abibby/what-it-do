@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/abibby/what-it-do/config"
 	"github.com/abibby/what-it-do/ezoauth"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -15,7 +16,7 @@ import (
 
 func getGCalService() (*calendar.Service, error) {
 	ctx := context.Background()
-	creds, err := os.ReadFile("credentials.json")
+	creds, err := os.ReadFile(config.Dir("google_creds.json"))
 	if err != nil {
 		log.Fatalf("Unable to read client secret file: %v", err)
 	}

@@ -31,7 +31,7 @@ func (c *Config) GetToken(ctx context.Context) (*oauth2.Token, error) {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
-	tokFile := path.Join(config.Dir(), c.Name+"_token.json")
+	tokFile := path.Join(config.Dir(c.Name + "_token.json"))
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
 		tok, err = c.getTokenFromWeb(ctx)
