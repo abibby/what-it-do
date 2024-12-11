@@ -26,14 +26,15 @@ type Config struct {
 	ExchangeOpts    []oauth2.AuthCodeOption
 }
 
-// Retrieve a token, saves the token, then returns the generated client.
-func (c *Config) GetToken(ctx context.Context) (*oauth2.Token, error) {
+func (c *Config) Client(ctx context.Context) (*http.Client, error) {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
 	tokFile := path.Join(config.Dir(c.Name + "_token.json"))
+	newToken := false
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
+		newToken = true
 		tok, err = c.getTokenFromWeb(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get token from web: %w", err)
@@ -43,14 +44,22 @@ func (c *Config) GetToken(ctx context.Context) (*oauth2.Token, error) {
 			return nil, fmt.Errorf("failed to save token: %w", err)
 		}
 	}
-	return tok, nil
-}
-func (c *Config) Client(ctx context.Context) (*http.Client, error) {
-	tok, err := c.GetToken(ctx)
-	if err != nil {
-		return nil, err
+
+	if !newToken {
+		refreshed, err := c.OAuthConfig.TokenSource(ctx, tok).Token()
+		if err != nil {
+			return nil, err
+		}
+
+		if !tokensEqual(tok, refreshed) {
+			err = saveToken(tokFile, tok)
+			if err != nil {
+				return nil, fmt.Errorf("failed to save token: %w", err)
+			}
+		}
+		tok = refreshed
 	}
-	return c.OAuthConfig.Client(ctx, tok), nil
+	return oauth2.NewClient(ctx, oauth2.StaticTokenSource(tok)), nil
 }
 
 func newState() (string, error) {
@@ -160,4 +169,12 @@ func runCodePullServer(config *oauth2.Config, state string) (string, error) {
 		return "", err
 	}
 	return authCode, nil
+}
+
+func tokensEqual(a, b *oauth2.Token) bool {
+	return a.AccessToken == b.AccessToken &&
+		a.RefreshToken == b.RefreshToken &&
+		a.ExpiresIn == b.ExpiresIn &&
+		a.Expiry == b.Expiry &&
+		a.TokenType == b.TokenType
 }
