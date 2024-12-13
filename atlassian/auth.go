@@ -2,7 +2,9 @@ package atlassian
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 )
 
@@ -24,6 +26,21 @@ type Resource struct {
 	AvatarUrl string   `json:"avatarUrl"` // "avatarUrl": "https:\/\/site-admin-avatar-cdn.prod.public.atl-paas.net\/avatars\/240\/flag.png"
 }
 
+type ErrorResponse struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+
+	response *http.Response
+}
+
+func (e *ErrorResponse) Error() string {
+	base := "jira request failed: "
+	if e.Message == "" || e.Code == 0 {
+		return base + e.response.Status
+	}
+	return fmt.Sprintf("%s%d %s", base, e.Code, e.Message)
+}
+
 func (c *Client) requestJSON(method, url string, body io.Reader, v any) error {
 	req, err := http.NewRequest(method, url, body)
 	if err != nil {
@@ -35,11 +52,21 @@ func (c *Client) requestJSON(method, url string, body io.Reader, v any) error {
 	if err != nil {
 		return err
 	}
-
 	defer resp.Body.Close()
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
+		return err
+	}
+
+	if resp.StatusCode != 200 {
+		err = &ErrorResponse{
+			response: resp,
+		}
+		jsonErr := json.Unmarshal(b, err)
+		if jsonErr != nil {
+			slog.Warn("failed to parse error json", "err", err)
+		}
 		return err
 	}
 	err = json.Unmarshal(b, v)

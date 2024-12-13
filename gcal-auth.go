@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/abibby/what-it-do/config"
@@ -18,7 +17,7 @@ func getGCalService() (*calendar.Service, error) {
 	ctx := context.Background()
 	creds, err := os.ReadFile(config.Dir("google_creds.json"))
 	if err != nil {
-		log.Fatalf("Unable to read client secret file: %v", err)
+		return nil, fmt.Errorf("Unable to read client secret file: %v", err)
 	}
 
 	// If modifying these scopes, delete your previously saved token.json.

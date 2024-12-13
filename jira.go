@@ -2,12 +2,11 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
-	"log"
 	"net/url"
-	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/abibby/salusa/set"
@@ -27,43 +26,17 @@ type JiraOAuth struct {
 	URL string
 }
 
-func ConfigFromJSON(b []byte) (*oauth2.Config, error) {
-	type a struct {
-		ClientID     string   `json:"client_id"`
-		Scopes       []string `json:"scopes"`
-		RedirectURI  string   `json:"redirect_uri"`
-		ClientSecret string   `json:"client_secret"`
-	}
-
-	creds := &a{}
-	err := json.Unmarshal(b, creds)
-	if err != nil {
-		return nil, err
-	}
-
-	return &oauth2.Config{
-		ClientID:     creds.ClientID,
-		ClientSecret: creds.ClientSecret,
-		Endpoint: oauth2.Endpoint{
-			AuthURL:  "https://auth.atlassian.com/authorize",
-			TokenURL: "https://auth.atlassian.com/oauth/token",
-		},
-		RedirectURL: creds.RedirectURI,
-		Scopes:      creds.Scopes,
-	}, nil
-}
-
 func getJiraClient() (*jira.Client, error) {
 	ctx := context.Background()
-	creds, err := os.ReadFile(config.Dir("atlassian_creds.json"))
-	if err != nil {
-		log.Fatalf("Unable to read client secret file: %v", err)
-	}
-
-	config, err := ConfigFromJSON(creds)
+	config, err := ezoauth.ReadConfigJSON(config.Dir("atlassian_creds.json"))
 	if err != nil {
 		return nil, err
 	}
+	config.Endpoint = oauth2.Endpoint{
+		AuthURL:  "https://auth.atlassian.com/authorize",
+		TokenURL: "https://auth.atlassian.com/oauth/token",
+	}
+
 	ezconfig := &ezoauth.Config{
 		Name:        "jira",
 		OAuthConfig: config,
@@ -115,43 +88,63 @@ func addJiraIssues(start, end time.Time) ([]*Row, error) {
 		return nil, fmt.Errorf("issue search: %w", err)
 	}
 
+	rowsMtx := &sync.Mutex{}
+	wg := &sync.WaitGroup{}
+	ctx, cancel := context.WithCancelCause(context.Background())
 	rows := []*Row{}
 	for _, issue := range issues {
-		subCategory := ""
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
 
-		changelogs, _, err := GetChangelogs(jiraClient, issue.ID, nil)
-		if err != nil {
-			return nil, fmt.Errorf("issue changelog: %w", err)
-		}
+			subCategory := ""
 
-		states := statesBetween(&issue, changelogs.Values, start, end)
+			changelogs, _, err := GetChangelogsContext(ctx, jiraClient, issue.ID, nil)
+			if errors.Is(err, context.Canceled) {
+				return
+			} else if err != nil {
+				cancel(fmt.Errorf("issue changelog: %w", err))
+				return
+			}
 
-		if issue.Fields.Assignee.AccountID == currentUser.AccountID {
-			if states.Has("In Progress") {
-				if issue.Fields.Type.Name == "Test Execution" {
-					subCategory = "Testing"
-				} else {
-					subCategory = "Implementation"
+			states := statesBetween(&issue, changelogs.Values, start, end)
+
+			if issue.Fields.Assignee.AccountID == currentUser.AccountID {
+				if states.Has("In Progress") {
+					if issue.Fields.Type.Name == "Test Execution" {
+						subCategory = "Testing"
+					} else {
+						subCategory = "Implementation"
+					}
+				}
+			} else {
+				if states.Has("In Testing") {
+					if hasEditedField(changelogs.Values, currentUser.AccountID, "Test Cases") {
+						subCategory = "Testing"
+					}
 				}
 			}
-		} else {
-			if states.Has("In Testing") {
-				if hasEditedField(changelogs.Values, currentUser.AccountID, "Test Cases") {
-					subCategory = "Testing"
-				}
+
+			if subCategory == "" {
+				return
 			}
-		}
 
-		if subCategory == "" {
-			continue
-		}
+			rowsMtx.Lock()
+			defer rowsMtx.Unlock()
 
-		rows = append(rows, &Row{
-			Date:        start,
-			Project:     "Technical - ",
-			SubCategory: subCategory,
-			Description: fmt.Sprintf("%s: %s", issue.Key, issue.Fields.Summary),
-		})
+			rows = append(rows, &Row{
+				Date:        start,
+				Project:     "Technical - ",
+				SubCategory: subCategory,
+				Description: fmt.Sprintf("%s: %s", issue.Key, issue.Fields.Summary),
+			})
+		}()
+	}
+
+	wg.Wait()
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 
 	return rows, nil

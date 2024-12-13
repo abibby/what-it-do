@@ -4,9 +4,11 @@ import (
 	"encoding/csv"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"time"
+
+	"github.com/abibby/salusa/clog"
 )
 
 const DateFormat = "January 2, 2006"
@@ -34,22 +36,34 @@ func (r Row) ToCSVRow() []string {
 }
 
 func main() {
+	var levelInfo bool
+	var levelDebug bool
 	var cal bool
 	var jira bool
+	var bb bool
 	var day string
 
+	flag.BoolVar(&levelInfo, "v", false, "do verbose logging")
+	flag.BoolVar(&levelDebug, "vv", false, "do verbose logging")
 	flag.BoolVar(&cal, "calendar", false, "run calendar tests")
 	flag.BoolVar(&jira, "jira", false, "run jira tests")
+	flag.BoolVar(&bb, "bitbucket", false, "run bitbucket tests")
 	flag.StringVar(&day, "date", time.Now().Format(time.DateOnly), "the date to get info for")
 
 	flag.Parse()
 
-	all := !cal && !jira
+	level := slog.LevelWarn
+	if levelDebug {
+		level = slog.LevelDebug
+	} else if levelInfo {
+		level = slog.LevelInfo
+	}
+	slog.SetDefault(slog.New(clog.DefaultHandler(level)))
+
+	all := !cal && !jira && !bb
 
 	now, err := time.Parse(time.DateOnly, day)
-	if err != nil {
-		log.Fatal(err)
-	}
+	check(err)
 	start := startOfDay(now)
 	end := endOfDay(now)
 
@@ -57,32 +71,38 @@ func main() {
 	out.Comma = '\t'
 
 	rows := []*Row{}
+
+	if all || bb {
+		prRows, err := getCodeReviews(start, end)
+		check(err)
+		rows = append(rows, prRows...)
+	}
 	if all || cal {
 		calRows, err := addCalenderEvents(start, end)
-		if err != nil {
-			log.Fatal(err)
-		}
+		check(err)
 		rows = append(rows, calRows...)
 	}
 
 	if all || jira {
 		jiraRows, err := addJiraIssues(start, end)
-		if err != nil {
-			log.Fatal(err)
-		}
+		check(err)
 		rows = append(rows, jiraRows...)
 	}
 
 	for _, row := range rows {
 		err = out.Write(row.ToCSVRow())
-		if err != nil {
-			log.Fatal(err)
-		}
+		check(err)
 	}
 	err = out.Write([]string{})
-	if err != nil {
-		log.Fatal(err)
-	}
+	check(err)
 
 	out.Flush()
+}
+
+func check(err error) {
+	if err == nil {
+		return
+	}
+
+	slog.Error("Fatal error", "err", err)
 }

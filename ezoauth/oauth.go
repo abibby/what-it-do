@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -26,15 +27,26 @@ type Config struct {
 	ExchangeOpts    []oauth2.AuthCodeOption
 }
 
+type LogRoundTripper struct {
+	Service   string
+	Transport http.RoundTripper
+}
+
+var _ http.RoundTripper = (*LogRoundTripper)(nil)
+
+// RoundTrip implements http.RoundTripper.
+func (l *LogRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	slog.Debug("Authenticated request", "service", l.Service, "url", req.URL, "method", req.Method)
+	return l.Transport.RoundTrip(req)
+}
+
 func (c *Config) Client(ctx context.Context) (*http.Client, error) {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
 	tokFile := path.Join(config.Dir(c.Name + "_token.json"))
-	newToken := false
 	tok, err := tokenFromFile(tokFile)
 	if err != nil {
-		newToken = true
 		tok, err = c.getTokenFromWeb(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get token from web: %w", err)
@@ -45,10 +57,16 @@ func (c *Config) Client(ctx context.Context) (*http.Client, error) {
 		}
 	}
 
-	if !newToken {
+	if !tok.Valid() {
+		slog.Info("Refreshing oauth token", "service", c.Name)
+
 		refreshed, err := c.OAuthConfig.TokenSource(ctx, tok).Token()
 		if err != nil {
-			return nil, err
+			slog.Warn("Failed to refresh access token", "err", err)
+			tok, err = c.getTokenFromWeb(ctx)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get token from web: %w", err)
+			}
 		}
 
 		if !tokensEqual(tok, refreshed) {
@@ -59,7 +77,10 @@ func (c *Config) Client(ctx context.Context) (*http.Client, error) {
 		}
 		tok = refreshed
 	}
-	return oauth2.NewClient(ctx, oauth2.StaticTokenSource(tok)), nil
+	client := oauth2.NewClient(ctx, oauth2.StaticTokenSource(tok))
+
+	client.Transport = &LogRoundTripper{Transport: client.Transport, Service: c.Name}
+	return client, nil
 }
 
 func newState() (string, error) {
@@ -113,7 +134,7 @@ func tokenFromFile(file string) (*oauth2.Token, error) {
 
 // Saves a token to a file path.
 func saveToken(p string, token *oauth2.Token) error {
-	fmt.Fprintf(os.Stderr, "Saving credential file to: %s\n", p)
+	slog.Info("Saving credential file to", "file", p)
 
 	err := os.MkdirAll(path.Dir(p), 0755)
 	if err != nil {
