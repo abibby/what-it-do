@@ -45,6 +45,14 @@ func (c *Client) ListPullRequests(options *ListPullRequestsOptions) (*PaginatedR
 	return u, err
 }
 
+func (c *Client) ListPullRequestActivity(options *ListPullRequestsOptions) (*PaginatedResponse[*PullRequestActivity], error) {
+	u := &PaginatedResponse[*PullRequestActivity]{
+		client: c,
+	}
+	err := c.request(http.MethodGet, "/2.0/repositories/"+url.PathEscape(options.Workspace)+"/"+url.PathEscape(options.Slug)+"/pullrequests/activity", options, nil, u)
+	return u, err
+}
+
 type ListRepositoriesOptions struct {
 	Workspace string
 	Fields    string `query:"fields"`

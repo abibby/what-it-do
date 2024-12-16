@@ -3,16 +3,22 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
+	"iter"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/abibby/what-it-do/bitbucket"
 	"github.com/abibby/what-it-do/config"
 	"github.com/abibby/what-it-do/ezoauth"
+	"github.com/abibby/what-it-do/parallel"
+	"github.com/davecgh/go-spew/spew"
 	"golang.org/x/oauth2"
 )
 
 func getCodeReviews(start, end time.Time) ([]*Row, error) {
+	ctx := context.Background()
+
 	bbCient, err := getBitbucketService()
 	if err != nil {
 		return nil, err
@@ -25,39 +31,43 @@ func getCodeReviews(start, end time.Time) ([]*Row, error) {
 	repos, err := bbCient.ListRepositories(&bitbucket.ListRepositoriesOptions{
 		Workspace: "ownersbox",
 		Role:      "contributor",
-		Query:     fmt.Sprintf(`updated_on > %s AND updated_on < %s`, start.Format(time.RFC3339), end.Format(time.RFC3339)),
-		Sort:      "-updated_on",
+		// Query:     fmt.Sprintf(`updated_on > %s AND updated_on < %s`, start.Format(time.RFC3339), end.Format(time.RFC3339)),
+		Query: fmt.Sprintf(`updated_on > %s`, start.Add((time.Hour*24*30)*-1).Format(time.RFC3339)),
+		Sort:  "-updated_on",
 	})
 	if err != nil {
 		return nil, err
 	}
-
 	rows := []*Row{}
-	for repo := range repos.All() {
-		fmt.Println(repo.Name)
-		repoPRs, err := bbCient.ListPullRequests(&bitbucket.ListPullRequestsOptions{
+
+	activity := parallel.FlatMap(ctx, repos.All(), func(ctx context.Context, repo *bitbucket.Repository) (iter.Seq[*bitbucket.PullRequestActivity], error) {
+		repoPRs, err := bbCient.ListPullRequestActivity(&bitbucket.ListPullRequestsOptions{
 			Workspace: "ownersbox",
-			Slug:      repo.UUID,
+			Slug:      strings.Split(repo.FullName, "/")[1],
 			Fields:    "+reviewers",
 			State:     []string{"OPEN", "MERGED"},
-			Query:     fmt.Sprintf(`reviewers.uuid="%s" and updated_on > %s AND updated_on < %s`, u.UUID, start.Format(time.RFC3339), end.Format(time.RFC3339)),
+			Query:     fmt.Sprintf(`followers.uuid="%s" and updated_on > %s AND updated_on < %s`, u.UUID, start.Format(time.RFC3339), end.Format(time.RFC3339)),
 		})
 		if err != nil {
 			return nil, err
 		}
+		return repoPRs.All(), nil
+	})
+	for pr := range activity {
 
-		for pr := range repoPRs.All() {
-			slog.Info("Reviewers", "len", len(pr.Reviewers))
-			// for _, par := range pr.Participants {
-			// }
-
-			rows = append(rows, &Row{
-				Date:        start,
-				Project:     "Technical - ",
-				SubCategory: "Code Review",
-				Description: pr.Title,
-			})
+		if pr.PullRequest.ID == 1652 {
+			spew.Dump(pr)
+			os.Exit(1)
 		}
+		// for _, par := range pr.Participants {
+		// }
+
+		rows = append(rows, &Row{
+			Date:        start,
+			Project:     "Technical - ",
+			SubCategory: "Code Review",
+			Description: pr.PullRequest.Title,
+		})
 	}
 
 	return rows, nil

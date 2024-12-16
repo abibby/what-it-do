@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/abibby/what-it-do/config"
+	"github.com/abibby/what-it-do/open"
 	"golang.org/x/oauth2"
 )
 
@@ -58,7 +59,7 @@ func (c *Config) Client(ctx context.Context) (*http.Client, error) {
 	}
 
 	if !tok.Valid() {
-		slog.Info("Refreshing oauth token", "service", c.Name, "token", tok)
+		slog.Info("Refreshing oauth token", "service", c.Name)
 
 		refreshed, err := c.OAuthConfig.TokenSource(ctx, tok).Token()
 		if err != nil {
@@ -106,6 +107,10 @@ func (c *Config) getTokenFromWeb(ctx context.Context) (*oauth2.Token, error) {
 
 	authURL := c.OAuthConfig.AuthCodeURL(state, c.AuthCodeURLOpts...)
 	fmt.Fprintf(os.Stderr, "Go to the following link in your browser: \n%v\n", authURL)
+	err = open.URL(authURL)
+	if err != nil {
+		return nil, err
+	}
 
 	authCode, err := runCodePullServer(c.OAuthConfig, state)
 	if err != nil {

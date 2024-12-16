@@ -1,5 +1,7 @@
 package bitbucket
 
+import "time"
+
 type Link struct {
 	Href string `json:"href"`
 	Name string `json:"name"`
@@ -26,8 +28,8 @@ type Participant struct {
 }
 
 type PullRequest struct {
-	Links any    `json:"links"`
-	Id    int    `json:"id"`
+	// Links *PullRequestLinks `json:"links"`
+	ID    int    `json:"id"`
 	Title string `json:"title"`
 	// Rendered    *RenderedPullRequestMarkup `json:"rendered"`
 	Summary any      `json:"summary"`
@@ -73,6 +75,19 @@ type PullRequest struct {
 	// the API only returns this list when an API requests a pull request by
 	// id.
 	Participants []*Participant `json:"participants"`
+}
+
+type PullRequestActivity struct {
+	PullRequest *PullRequest         `json:"pull_request"`
+	Approval    *PullRequestApproval `json:"approval"`
+	Comment     *PullRequestComment  `json:"comment"`
+}
+
+type PullRequestApproval struct {
+	Date time.Time `json:"date"`
+}
+type PullRequestComment struct {
+	Date time.Time `json:"date"`
 }
 
 type RepositoryLinks struct {

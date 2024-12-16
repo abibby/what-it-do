@@ -5,6 +5,7 @@ go 1.23.2
 require (
 	github.com/abibby/salusa v0.18.1
 	github.com/andygrunwald/go-jira v1.16.0
+	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	golang.org/x/oauth2 v0.24.0
 	google.golang.org/api v0.209.0
 )
