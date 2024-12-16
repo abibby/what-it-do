@@ -58,24 +58,24 @@ func (c *Config) Client(ctx context.Context) (*http.Client, error) {
 	}
 
 	if !tok.Valid() {
-		slog.Info("Refreshing oauth token", "service", c.Name)
+		slog.Info("Refreshing oauth token", "service", c.Name, "token", tok)
 
 		refreshed, err := c.OAuthConfig.TokenSource(ctx, tok).Token()
 		if err != nil {
 			slog.Warn("Failed to refresh access token", "err", err)
-			tok, err = c.getTokenFromWeb(ctx)
+			refreshed, err = c.getTokenFromWeb(ctx)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get token from web: %w", err)
 			}
 		}
 
 		if !tokensEqual(tok, refreshed) {
+			tok = refreshed
 			err = saveToken(tokFile, tok)
 			if err != nil {
 				return nil, fmt.Errorf("failed to save token: %w", err)
 			}
 		}
-		tok = refreshed
 	}
 	client := oauth2.NewClient(ctx, oauth2.StaticTokenSource(tok))
 
@@ -193,6 +193,9 @@ func runCodePullServer(config *oauth2.Config, state string) (string, error) {
 }
 
 func tokensEqual(a, b *oauth2.Token) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
 	return a.AccessToken == b.AccessToken &&
 		a.RefreshToken == b.RefreshToken &&
 		a.ExpiresIn == b.ExpiresIn &&

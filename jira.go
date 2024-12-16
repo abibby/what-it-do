@@ -109,7 +109,7 @@ func addJiraIssues(start, end time.Time) ([]*Row, error) {
 
 			states := statesBetween(&issue, changelogs.Values, start, end)
 
-			if issue.Fields.Assignee.AccountID == currentUser.AccountID {
+			if issue.Fields.Assignee != nil && issue.Fields.Assignee.AccountID == currentUser.AccountID {
 				if states.Has("In Progress") {
 					if issue.Fields.Type.Name == "Test Execution" {
 						subCategory = "Testing"
