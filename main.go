@@ -18,6 +18,7 @@ type Row struct {
 	Project     string
 	SubCategory string
 	Hours       time.Duration
+	JiraID      string
 	Description string
 }
 
@@ -31,6 +32,7 @@ func (r Row) ToCSVRow() []string {
 		r.Project,
 		r.SubCategory,
 		hours,
+		r.JiraID,
 		r.Description,
 	}
 }

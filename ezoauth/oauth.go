@@ -41,7 +41,7 @@ func (l *LogRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return l.Transport.RoundTrip(req)
 }
 
-func (c *Config) Client(ctx context.Context) (*http.Client, error) {
+func (c *Config) Token(ctx context.Context) (*oauth2.Token, error) {
 	// The file token.json stores the user's access and refresh tokens, and is
 	// created automatically when the authorization flow completes for the first
 	// time.
@@ -77,6 +77,13 @@ func (c *Config) Client(ctx context.Context) (*http.Client, error) {
 				return nil, fmt.Errorf("failed to save token: %w", err)
 			}
 		}
+	}
+	return tok, nil
+}
+func (c *Config) Client(ctx context.Context) (*http.Client, error) {
+	tok, err := c.Token(ctx)
+	if err != nil {
+		return nil, err
 	}
 	client := oauth2.NewClient(ctx, oauth2.StaticTokenSource(tok))
 

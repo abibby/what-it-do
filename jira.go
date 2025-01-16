@@ -136,7 +136,8 @@ func addJiraIssues(start, end time.Time) ([]*Row, error) {
 				Date:        start,
 				Project:     "Technical - ",
 				SubCategory: subCategory,
-				Description: fmt.Sprintf("%s: %s", issue.Key, issue.Fields.Summary),
+				JiraID:      issue.Key,
+				Description: issue.Fields.Summary,
 			})
 		}()
 	}
