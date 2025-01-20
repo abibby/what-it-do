@@ -91,7 +91,10 @@ func addJiraIssues(start, end time.Time) ([]*Row, error) {
 	rowsMtx := &sync.Mutex{}
 	wg := &sync.WaitGroup{}
 	ctx, cancel := context.WithCancelCause(context.Background())
+	defer cancel(nil)
+
 	rows := []*Row{}
+
 	for _, issue := range issues {
 		wg.Add(1)
 		go func() {
