@@ -12,14 +12,16 @@ import (
 )
 
 type Client struct {
-	httpClient *http.Client
-	baseURL    string
+	httpClient      *http.Client
+	baseURL         string
+	internalBaseURL string
 }
 
 func NewClient(c *http.Client) *Client {
 	return &Client{
-		httpClient: c,
-		baseURL:    "https://api.bitbucket.org",
+		httpClient:      c,
+		baseURL:         "https://api.bitbucket.org",
+		internalBaseURL: "https://bitbucket.org",
 	}
 }
 
@@ -78,6 +80,17 @@ func (c *Client) request(method, p string, query, body any, v any) error {
 	queryValues := toValues(query)
 
 	return c.rawRequest(method, c.baseURL+p+"?"+queryValues.Encode(), bodyReader, v)
+}
+
+func (c *Client) internalRequest(method, p string, query, body any, v any) error {
+	var bodyReader io.Reader = http.NoBody
+	if body != nil {
+		bodyReader = jsonio.NewReader(body)
+	}
+
+	queryValues := toValues(query)
+
+	return c.rawRequest(method, c.internalBaseURL+p+"?"+queryValues.Encode(), bodyReader, v)
 }
 
 func (c *Client) rawRequest(method, url string, body io.Reader, v any) error {
@@ -141,3 +154,19 @@ func toValues(v any) url.Values {
 
 	return val
 }
+
+type ListWorkspacePullRequestsOptions struct {
+	Workspace string
+	Fields    string `query:"fields"`
+	Query     string `query:"q"`
+}
+
+func (c *Client) ListWorkspacePullRequests(options *ListWorkspacePullRequestsOptions) (*PaginatedResponse[*PullRequest], error) {
+	u := &PaginatedResponse[*PullRequest]{
+		client: c,
+	}
+	err := c.internalRequest(http.MethodGet, "/!api/internal/workspaces/"+url.PathEscape(options.Workspace)+"/pullrequests/", options, nil, u)
+	return u, err
+}
+
+// https://bitbucket.org/!api/internal/workspaces/ownersbox/pullrequests/?fields=-values.closed_by%2C-values.description%2C-values.summary%2C-values.rendered%2C-values.properties%2C-values.reason%2C-values.reviewers%2C-values.participants.user.nickname%2C%2Bvalues.destination.branch.name%2C%2Bvalues.destination.repository.full_name%2C%2Bvalues.destination.repository.name%2C%2Bvalues.destination.repository.uuid%2C%2Bvalues.destination.repository.full_name%2C%2Bvalues.destination.repository.name%2C%2Bvalues.destination.repository.links.self.href%2C%2Bvalues.destination.repository.links.html.href%2C%2Bvalues.source.branch.name%2C%2Bvalues.source.repository.full_name%2C%2Bvalues.source.repository.name%2C%2Bvalues.source.repository.uuid%2C%2Bvalues.source.repository.full_name%2C%2Bvalues.source.repository.name%2C%2Bvalues.source.repository.links.self.href%2C%2Bvalues.source.repository.links.html.href%2C%2Bvalues.source.commit.hash&page=1&pagelen=20&q=state%3D%22OPEN%22%20AND%20followers.uuid%3D%22c8c46d4c-e199-4859-a510-e038ef88d80e%22

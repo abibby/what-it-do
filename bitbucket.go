@@ -3,22 +3,19 @@ package main
 import (
 	"context"
 	"fmt"
-	"iter"
-	"os"
+	"regexp"
 	"strings"
 	"time"
 
 	"github.com/abibby/what-it-do/bitbucket"
 	"github.com/abibby/what-it-do/config"
 	"github.com/abibby/what-it-do/ezoauth"
-	"github.com/abibby/what-it-do/parallel"
-	"github.com/davecgh/go-spew/spew"
 	"golang.org/x/oauth2"
 )
 
-func getCodeReviews(start, end time.Time) ([]*Row, error) {
-	ctx := context.Background()
+var jiraRE = regexp.MustCompile(`PD-\d+`)
 
+func getCodeReviews(start, end time.Time) ([]*Row, error) {
 	bbCient, err := getBitbucketService()
 	if err != nil {
 		return nil, err
@@ -28,49 +25,55 @@ func getCodeReviews(start, end time.Time) ([]*Row, error) {
 		return nil, err
 	}
 
-	repos, err := bbCient.ListRepositories(&bitbucket.ListRepositoriesOptions{
+	rows := []*Row{}
+
+	prs, err := bbCient.ListWorkspacePullRequests(&bitbucket.ListWorkspacePullRequestsOptions{
 		Workspace: "ownersbox",
-		Role:      "contributor",
-		// Query:     fmt.Sprintf(`updated_on > %s AND updated_on < %s`, start.Format(time.RFC3339), end.Format(time.RFC3339)),
-		Query: fmt.Sprintf(`updated_on > %s`, start.Add((time.Hour*24*30)*-1).Format(time.RFC3339)),
-		Sort:  "-updated_on",
+		Fields:    "+reviewers",
+		Query:     fmt.Sprintf(`(state="MERGED" or state="OPEN") and followers.uuid="%s" and updated_on > %s AND updated_on < %s`, u.UUID, start.Format(time.RFC3339), end.Format(time.RFC3339)),
 	})
 	if err != nil {
 		return nil, err
 	}
-	rows := []*Row{}
 
-	activity := parallel.FlatMap(ctx, repos.All(), func(ctx context.Context, repo *bitbucket.Repository) (iter.Seq[*bitbucket.PullRequestActivity], error) {
-		repoPRs, err := bbCient.ListPullRequestActivity(&bitbucket.ListPullRequestsOptions{
-			Workspace: "ownersbox",
-			Slug:      strings.Split(repo.FullName, "/")[1],
-			Fields:    "+reviewers",
-			State:     []string{"OPEN", "MERGED"},
-			Query:     fmt.Sprintf(`followers.uuid="%s" and updated_on > %s AND updated_on < %s`, u.UUID, start.Format(time.RFC3339), end.Format(time.RFC3339)),
-		})
-		if err != nil {
-			return nil, err
+	for pr := range prs.All() {
+
+		if !didReview(pr, u, start, end) {
+			continue
 		}
-		return repoPRs.All(), nil
-	})
-	for pr := range activity {
 
-		if pr.PullRequest.ID == 1652 {
-			spew.Dump(pr)
-			os.Exit(1)
+		description := pr.Title
+		jiraID := jiraRE.FindString(description)
+		if jiraID != "" {
+			description = regexp.MustCompile(".*"+jiraID+":?").ReplaceAllString(description, "")
 		}
-		// for _, par := range pr.Participants {
-		// }
-
+		description = strings.TrimSpace(description)
 		rows = append(rows, &Row{
 			Date:        start,
 			Project:     "Technical - ",
 			SubCategory: "Code Review",
-			Description: pr.PullRequest.Title,
+			JiraID:      jiraID,
+			Description: description,
 		})
 	}
 
 	return rows, nil
+}
+
+func didReview(pr *bitbucket.PullRequest, user *bitbucket.Account, start, end time.Time) bool {
+	for _, par := range pr.Participants {
+		if par.User.UUID != user.UUID {
+			continue
+		}
+		participatedOn, err := time.Parse(time.RFC3339, par.ParticipatedOn)
+		if err != nil {
+			return false
+		}
+		if start.Before(participatedOn) && end.After(participatedOn) {
+			return true
+		}
+	}
+	return false
 }
 
 func getBitbucketService() (*bitbucket.Client, error) {

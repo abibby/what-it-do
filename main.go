@@ -74,11 +74,11 @@ func main() {
 
 	rows := []*Row{}
 
-	// if all || bb {
-	// 	prRows, err := getCodeReviews(start, end)
-	// 	check(err)
-	// 	rows = append(rows, prRows...)
-	// }
+	if all || bb {
+		prRows, err := getCodeReviews(start, end)
+		check(err)
+		rows = append(rows, prRows...)
+	}
 	if all || cal {
 		calRows, err := addCalenderEvents(start, end)
 		check(err)
