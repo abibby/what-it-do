@@ -8,6 +8,8 @@ cloud.google.com/go/compute/metadata v0.5.2/go.mod h1:C66sj2AluDcIqakBq/M8lw8/yb
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/abibby/salusa v0.18.1 h1:HH7GIn57Y53KudDTEXFvSuju3mEcaueskcI/JFqp0pk=
 github.com/abibby/salusa v0.18.1/go.mod h1:rDYUwNQERBNRYepQ6WfQuNTf0NMmIu17gAWdeRB1ENc=
+github.com/abibby/salusa v0.19.0 h1:VJutgHe1HAyb3g0KBDJuNobE5Ki9mWFyjxkrFit1gxc=
+github.com/abibby/salusa v0.19.0/go.mod h1:7IfiBSi/h70udxTS6SOlgsoxz8CpjnaUpIIDn2woWmM=
 github.com/andygrunwald/go-jira v1.16.0 h1:PU7C7Fkk5L96JvPc6vDVIrd99vdPnYudHu4ju2c2ikQ=
 github.com/andygrunwald/go-jira v1.16.0/go.mod h1:UQH4IBVxIYWbgagc0LF/k9FRs9xjIiQ8hIcC6HfLwFU=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=

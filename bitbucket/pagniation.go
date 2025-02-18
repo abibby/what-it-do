@@ -26,15 +26,15 @@ func (r *PaginatedResponse[T]) All() iter.Seq[T] {
 					return
 				}
 			}
-			if r.Next == "" {
+			if page.Next == "" {
 				return
 			}
 
 			if page.Size < page.PageLen*page.Page {
 				return
 			}
-
-			err := r.client.rawRequest(http.MethodGet, r.Next, http.NoBody, page)
+			page = &PaginatedResponse[T]{}
+			err := r.client.rawRequest(http.MethodGet, page.Next, http.NoBody, page)
 			if err != nil {
 				r.iterErr = err
 				return
